@@ -108,7 +108,7 @@ To prevent your wifi interface from being stolen by the simulator edit the .dron
 replace the line:
 > <wifi_iface>auto</wifi_iface> 
 
-to 
+with 
 
 > <wifi_iface></wifi_iface>
 
