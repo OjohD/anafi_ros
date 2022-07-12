@@ -73,11 +73,11 @@ Everytime you need to work with Olympe, source the custom environment in the act
 #
 
 # Installing Parrot Sphinx Simulator 
-Follow the instructions from [Parrot Developers](https://developer.parrot.com/docs/sphinx/installation.html) to install the latest version of the software on your Ubuntu 20.04 system. 
+Follow the instructions from [Parrot Developers](https://developer.parrot.com/docs/sphinx/installation.html) to install the latest version of the simulator on your Ubuntu 20.04 system. 
 
 You will need to contact the developers for access to their software. 
 
-Once the software is installed, you must restart your PC before you can start the software for the first time. 
+Once the simulator is installed, you must restart your PC before you can start the simulator for the first time. 
 
 
 ## Running the Simulator
