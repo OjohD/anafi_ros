@@ -4,7 +4,7 @@ This repository contains step-by-step instructions for configuring the Olympe SD
 Tested on  Lenovo Y5 i7 10th gen RTX 2060 laptop running ROS Noetic on Ubuntu 20.04. 
 
 ## Setting up your ROS workspace
-clone this repository to your src folder.
+clone this repository to your src folder as follows.
 
     mkdir -p ~/anafi_ws/src
     cd ~/anafi_ws/src
