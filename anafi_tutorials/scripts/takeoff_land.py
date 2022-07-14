@@ -9,7 +9,7 @@ import math
 import cv2
 import queue
 import threading
-from cv_bridge import CvBridge, CvBridgeError
+from cv_bridge import CvBridge
 
 from olympe.messages.ardrone3.Piloting import TakeOff, Landing, PCMD
 from olympe.messages.ardrone3.PilotingState import FlyingStateChanged
