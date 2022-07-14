@@ -10,6 +10,7 @@ class anafi():
         self.pub_takeoff = rospy.Publisher(
             "/anafi/takeoff", Int16, queue_size=1)
         self.pub_land = rospy.Publisher("/anafi/land", Int16, queue_size=1)
+
         self.user = Int16()
 
     def main(self):
