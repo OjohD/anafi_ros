@@ -43,17 +43,17 @@ class anafi():
         self.pub_odometry = rospy.Publisher(
             "/anafi/odometry", Odometry, queue_size=1)
         self.pub_image = rospy.Publisher("/anafi/image", Image, queue_size=1)
+        self.pub_horizontalspeed = rospy.Publisher(
+            "/anafi/horizontal_speed", Float32, queue_size=1)
 
         # Subscribers
         takeoff_sub = rospy.Subscriber("/anafi/takeoff", Int16, self._takeoff)
         land_sub = rospy.Subscriber("/anafi/land", Int16, self._land)
         cmdVel_sub = rospy.Subscriber("/anafi/cmd_vel", Twist, self._cmdVel)
 
-        ############################## subscribe to speed 
-        speed_sub = rospy.Subscriber("/anafi/speed", Vector3Stamped, self.compute_PID)
-
-
-
+        # subscribe to speed
+        speed_sub = rospy.Subscriber(
+            "/anafi/speed", Vector3Stamped, self.compute_PID)
 
         self.bridge = CvBridge()
         self.frame_queue = queue.Queue()
@@ -61,7 +61,7 @@ class anafi():
         self.user = Int16()
         self.status = False
         self.connected = False
-        
+
         DRONE_IP = '10.202.0.1'  # SIM
         # DRONE_IP = "192.168.42.1"  # REAL
         self.drone = olympe.Drone(DRONE_IP)
@@ -81,26 +81,28 @@ class anafi():
         self.flush_queue_lock = threading.Lock()
         time.sleep(3)
 
-
-
         # init PID params
         self.previousTime = time.time()
-        self.cumError_x = 0
-        self.cumError_y = 0
+        self.cumError_pitch = 0
+        self.cumError_roll = 0
         self.cumError_z = 0
-        
+        self.lastError_pitch = 0
+        self.lastError_roll = 0
+
         self.roll = 0
         self.pitch = 0
-        self.yaw = 0
+        # self.yaw = 0
 
-        self.target_Speed_x = 0
-        self.target_Speed_y = 0
-        
-
-
-
+        self.target_pitch = 0
+        self.target_roll = 0
 
     def clamp(self, x,  in_min,  in_max,  out_min,  out_max):
+        if x > in_max:
+            x = in_max
+    
+        if x < in_min:
+            x = in_min
+
         res = (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
         return np.int8(res)
 
@@ -178,6 +180,11 @@ class anafi():
             msg_speed.vector.y = -speed['east']
             msg_speed.vector.z = -speed['down']
             self.pub_speed.publish(msg_speed)
+
+            # horizontal Speed (Magnitude) (m/s)
+            drone_speed = math.sqrt(
+                (msg_speed.vector.x)**2 + (msg_speed.vector.y)**2)
+            self.pub_horizontalspeed.publish(drone_speed)
 
             # air speed [-1=no data, > 0] (m/s)
             air_speed = metadata[1]['air_speed']
@@ -258,59 +265,82 @@ class anafi():
             self.drone(Landing()).wait()
             print("Landed")
 
-    
     # PID conroller
     # Consider making a thread for this
+
     def compute_PID(self, drone_speed):
 
-        # https://www.teachmemicro.com/arduino-pid-control-tutorial/ 
-        
+        # https://www.teachmemicro.com/arduino-pid-control-tutorial/
+
         # PID constants
-        kp = 100
-        ki = 100
-        kd = 100
-               
+        kp = 3.5
+        ki = 0
+        kd = 0
 
-        currentTime = time.time();                                  # get current time
-        elapsedTime = currentTime - self.previousTime                    # compute time elapsed from previous computation
-        
-        error_x = self.target_Speed_x - drone_speed.vector.x                      # determine error
-        error_y = self.target_Speed_y - drone_speed.vector.y  
+        currentTime = time.time()                                  # get current time
+        # compute time elapsed from previous computation
+        elapsedTime = currentTime - self.previousTime
 
+        drone_speed = math.sqrt((drone_speed.vector.y) **
+                                2 + (drone_speed.vector.x)**2)
+        # determine error
+        error_pitch = self.target_pitch - drone_speed
+        error_roll = self.target_roll - drone_speed
 
-        self.cumError_x = self.cumError_x + error_x * elapsedTime                            # compute integral
-        self.cumError_y = self.cumError_y + error_y * elapsedTime                            # compute integral        
-        
-        
-        rateError_x = (error_x - lastError_x)/elapsedTime               # compute derivative
-        rateError_y = (error_y - lastError_y)/elapsedTime               # compute derivative
+        rospy.loginfo("Error x: %f Error y: %f", error_pitch, error_roll)
 
-        self.PID_x = kp*error_x + ki*self.cumError_x + kd*rateError_x         # PID output 
-        self.PID_y = kp*error_y + ki*self.cumError_y + kd*rateError_y         # PID output               
+        self.cumError_pitch = self.cumError_pitch + error_pitch * \
+            elapsedTime                            # compute integral
+        self.cumError_roll = self.cumError_roll + error_roll * \
+            elapsedTime                            # compute integral
 
-        lastError_x = error_x  
-        lastError_y = error_y                                         # remember current error
-        self.previousTime = currentTime                                 # remember current time
+        rateError_pitch = (error_pitch - self.lastError_pitch) / \
+            elapsedTime               # compute derivative
+        rateError_roll = (error_roll - self.lastError_roll) / \
+            elapsedTime               # compute derivative
 
-        
- 
+        self.PID_pitch = abs(kp*error_pitch + ki*self.cumError_pitch + \
+            kd*rateError_pitch )        # PID output
+        self.PID_roll = abs(kp*error_roll + ki*self.cumError_roll + \
+            kd*rateError_roll )        # PID output
 
+        self.lastError_pitch = error_pitch
+        # remember current error
+        self.lastError_roll = error_roll
+        # remember current time
+        self.previousTime = currentTime
 
     def _cmdVel(self, msg):
 
         # https://developer.parrot.com/docs/olympe/arsdkng_ardrone3_piloting.html#olympe.messages.ardrone3.Piloting.PCMD
 
-        self.target_Speed_x = msg.linear.x
-        self.target_Speed_y = msg.linear.y
+        roll = msg.linear.y
+        pitch = msg.linear.x
         yaw = msg.angular.z
         gaz = msg.linear.z
 
         # // If roll or pitch value are non-zero, enabel roll/pitch flag
         flag = not ((abs(roll) < 0.001) and (abs(pitch) < 0.001))
 
-        roll = self.clamp(self.PID_x, -1, 1, -10, 10)
-        pitch = self.clamp(self.PID_y, -1, 1, -10, 10)
-        yaw = self.clamp(self.yaw, -3.14, 3.14, -30, 30)
+        # our target
+        self.target_pitch = abs(pitch)
+        self.target_roll = abs(roll)
+
+        if roll > 0:
+            roll = self.clamp(self.PID_roll, -1, 1, -10, 10)
+        if roll < 0:
+            roll = self.clamp(-self.PID_roll, -1, 1, -10, 10)
+        else:
+            roll = int(roll)
+
+        if pitch > 0:
+            pitch = self.clamp(self.PID_pitch, -1, 1, -10, 10)
+        if pitch < 0:
+            pitch = self.clamp(-self.PID_pitch, -1, 1, -10, 10)
+        else:
+            pitch = int(pitch)
+
+        yaw = self.clamp(yaw, -3.14, 3.14, -30, 30)
         gaz = self.clamp(gaz, -1, 1, -50, 50)
 
         self.drone(PCMD(flag, -roll, pitch, -yaw, gaz, 0))
