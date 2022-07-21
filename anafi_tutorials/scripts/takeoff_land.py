@@ -47,23 +47,24 @@ class anafi():
             "/anafi/horizontal_speed", Float32, queue_size=1)
 
         # Subscribers
-        takeoff_sub = rospy.Subscriber("/anafi/takeoff", Int16, self._takeoff)
-        land_sub = rospy.Subscriber("/anafi/land", Int16, self._land)
-        cmdVel_sub = rospy.Subscriber("/anafi/cmd_vel", Twist, self._cmdVel)
+        rospy.Subscriber("/anafi/takeoff", Int16, self._takeoff)
+        rospy.Subscriber("/anafi/land", Int16, self._land)
+        rospy.Subscriber("/anafi/cmd_vel", Twist, self._cmdVel)
+        rospy.Subscriber("/anafi/height", Float32, self._altitude)
 
         # subscribe to speed
-        speed_sub = rospy.Subscriber(
+        rospy.Subscriber(
             "/anafi/speed", Vector3Stamped, self.compute_PID)
 
         self.bridge = CvBridge()
         self.frame_queue = queue.Queue()
         self.flush_queue_lock = threading.Lock()
-        self.user = Int16()
+
         self.status = False
         self.connected = False
 
-        DRONE_IP = '10.202.0.1'  # SIM
-        # DRONE_IP = "192.168.42.1"  # REAL
+        # DRONE_IP = '10.202.0.1'  # SIM
+        DRONE_IP = "192.168.42.1"  # REAL
         self.drone = olympe.Drone(DRONE_IP)
         self.connection = self.drone.connect()
         if getattr(self.connection, 'OK') == True:
@@ -83,6 +84,7 @@ class anafi():
 
         # init PID params
         self.previousTime = time.time()
+        self.takeoffTime = 0
         self.cumError_pitch = 0
         self.cumError_roll = 0
         self.cumError_z = 0
@@ -91,15 +93,22 @@ class anafi():
 
         self.roll = 0
         self.pitch = 0
-        # self.yaw = 0
+        self.P_gaz = 0
 
         self.target_pitch = 0
         self.target_roll = 0
+        self.thrust = 0
+        
+        self.manual_control = False
+        self.trigger_height = False
+        self.emergency_land = False
+        self.height_offset = 3.5
+        self.target_altitude = 1.5  # meters
 
     def clamp(self, x,  in_min,  in_max,  out_min,  out_max):
         if x > in_max:
             x = in_max
-    
+
         if x < in_min:
             x = in_min
 
@@ -255,12 +264,17 @@ class anafi():
 
     def _takeoff(self, msg):
         if msg.data == 1:
+            self.trigger_height = True
+            self.takeoffTime = time.time()
+            self.emergency_land = False
             # https://developer.parrot.com/docs/olympe/arsdkng_ardrone3_piloting.html#olympe.messages.ardrone3.Piloting.TakeOff
             self.drone(TakeOff() >> FlyingStateChanged(
                 state="hovering", _timeout=10)).wait()
 
     def _land(self, msg):
         if msg.data == 2:
+            self.emergency_land = True
+            self.target_altitude = 1.5
             # https://developer.parrot.com/docs/olympe/arsdkng_ardrone3_piloting.html#olympe.messages.ardrone3.Piloting.Landing
             self.drone(Landing()).wait()
             print("Landed")
@@ -273,21 +287,19 @@ class anafi():
         # https://www.teachmemicro.com/arduino-pid-control-tutorial/
 
         # PID constants
-        kp = 3.5
-        ki = 0
-        kd = 0
+        kp = 6
+        ki = 0.65
+        kd = 2
+
+        drone_speed = math.sqrt((drone_speed.vector.y) **
+                                2 + (drone_speed.vector.x)**2)
 
         currentTime = time.time()                                  # get current time
         # compute time elapsed from previous computation
         elapsedTime = currentTime - self.previousTime
-
-        drone_speed = math.sqrt((drone_speed.vector.y) **
-                                2 + (drone_speed.vector.x)**2)
         # determine error
         error_pitch = self.target_pitch - drone_speed
         error_roll = self.target_roll - drone_speed
-
-        rospy.loginfo("Error x: %f Error y: %f", error_pitch, error_roll)
 
         self.cumError_pitch = self.cumError_pitch + error_pitch * \
             elapsedTime                            # compute integral
@@ -299,16 +311,28 @@ class anafi():
         rateError_roll = (error_roll - self.lastError_roll) / \
             elapsedTime               # compute derivative
 
-        self.PID_pitch = abs(kp*error_pitch + ki*self.cumError_pitch + \
-            kd*rateError_pitch )        # PID output
-        self.PID_roll = abs(kp*error_roll + ki*self.cumError_roll + \
-            kd*rateError_roll )        # PID output
+        self.PID_pitch = abs(kp*error_pitch + ki*self.cumError_pitch +
+                             kd*rateError_pitch)        # PID output
+        self.PID_roll = abs(kp*error_roll + ki*self.cumError_roll +
+                            kd*rateError_roll)        # PID output
 
         self.lastError_pitch = error_pitch
         # remember current error
         self.lastError_roll = error_roll
         # remember current time
         self.previousTime = currentTime
+
+        if drone_speed < 0.01:
+            # reset
+            self.cumError_pitch = 0
+            self.cumError_roll = 0
+
+            self.lastError_pitch = 0
+            self.lastError_roll = 0
+
+            # self.PID_pitch = 0
+            # self.PID_roll = 0
+            self.previousTime = time.time()
 
     def _cmdVel(self, msg):
 
@@ -317,7 +341,7 @@ class anafi():
         roll = msg.linear.y
         pitch = msg.linear.x
         yaw = msg.angular.z
-        gaz = msg.linear.z
+        self.thrust = msg.linear.z
 
         # // If roll or pitch value are non-zero, enabel roll/pitch flag
         flag = not ((abs(roll) < 0.001) and (abs(pitch) < 0.001))
@@ -341,16 +365,50 @@ class anafi():
             pitch = int(pitch)
 
         yaw = self.clamp(yaw, -3.14, 3.14, -30, 30)
-        gaz = self.clamp(gaz, -1, 1, -50, 50)
+        gaz = self.clamp(self.thrust, -1, 1, -50, 50)
 
         self.drone(PCMD(flag, -roll, pitch, -yaw, gaz, 0))
+
+    def _altitude(self, msg):
+        rospy.loginfo("target: %f", self.target_altitude)
+        if self.trigger_height and (time.time() - self.takeoffTime) > 3:
+            if self.emergency_land:
+                self.drone(PCMD(0, 0, 0, 0, 0, 0))
+                self.drone(Landing()).wait()
+            else:
+                kp_alt = 15
+                err = self.target_altitude - (msg.data-self.height_offset)
+                self.P_gaz = float(kp_alt * err)
+
+                gaz = self.clamp(self.P_gaz, -10, 10, -30, 30)
+
+                self.drone(PCMD(0, 0, 0, 0, gaz, 0))
+
+                if (time.time() - self.takeoffTime) > 15 or err < 0.008:
+                    self.trigger_height = False
+                    self.manual_control = True
+
+        if self.manual_control and self.trigger_height == False:
+            self.target_altitude = msg.data
+
+            kp_alt = 6.5
+            err = self.target_altitude - (msg.data-self.height_offset)
+            self.P_gaz = float(kp_alt * err)
+
+            gaz = self.clamp(self.P_gaz, -10, 10, -30, 30)
+
+            self.drone(PCMD(0, 0, 0, 0, gaz, 0))
 
 
 if __name__ == '__main__':
     rospy.init_node("anafi_node")
     rate = rospy.Rate(10)
     app = anafi()
-    while not rospy.is_shutdown():
-        app.yuv_main()
-        rate.sleep()
-        # rospy.spin()
+    try:
+        while not rospy.is_shutdown():
+            app.yuv_main()
+            rate.sleep()
+            # rospy.spin()
+    except KeyboardInterrupt:
+        # app._land(2)
+        pass
