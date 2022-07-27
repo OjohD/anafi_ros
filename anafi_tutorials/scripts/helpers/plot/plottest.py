@@ -46,7 +46,7 @@ class Plot2:
 
         return self.vel
 
-    def plotter(self, ax_no, title, pid_setpoint):
+    def plotter(self, ax_no, title, pid_setpoint, ylim):
 
         # # Set three parameters of PID and limit output
         pid_setpoint = pid_setpoint
@@ -73,7 +73,7 @@ class Plot2:
             f.suptitle(title, fontsize=20)
 
             # ax.set_title('Yaw')
-            ax.set_ylim(bottom=-1, top=1)
+            ax.set_ylim(bottom=-ylim, top=ylim)
 
             one_axis = True
 

@@ -37,8 +37,10 @@ if __name__ == '__main__':
     # rospy.Subscriber("/anafi/height", Float32, droneheightCb)
 
     plot_title = "PID"
-    pid_setpoint = 0.5
+    pid_setpoint = 1
+    ylim = 2
 
-    threading.Thread(target=plot.plotter, args=(1, plot_title, pid_setpoint,)).start()
+    threading.Thread(target=plot.plotter, args=(
+        1, plot_title, pid_setpoint, ylim, )).start()
 
     rospy.spin()
