@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from tkinter import font
 import rospy
 import time
 import sys
@@ -23,8 +24,17 @@ class anafi():
         self.roll, self.pitch, self.yaw, self.thrust = 10, 10, 10, 10         # actual values
         # rpyt state select
         self.state_roll, self.state_pitch, self.state_yaw, self.state_thrust = 0, 0, 0, 0
-
+        self.screen_text0 = "Hello World"
+        self.screen_text1 = "Hello World"
     def main(self):
+
+        self.screen_text0 = ("rpyt states: " + str(self.state_roll) + " " + str(
+            self.state_pitch) + " " + str(self.state_yaw) + " " + str(self.state_thrust))
+
+        self.screen_text1 = ("rpyt values: " + str(self.roll) + " " + str(
+            self.pitch) + " " + str(self.yaw) + " " + str(self.thrust))
+
+
         rospy.loginfo("states -- r: %s p: %s y: %s t: %s", str(self.state_roll), str(
             self.state_pitch), str(self.state_yaw), str(self.state_thrust))
 
@@ -157,16 +167,35 @@ if __name__ == '__main__':
     rospy.loginfo('Publisher initialized')
     rate = rospy.Rate(100)
 
+    # display settings
     pygame.init()
-    W, H = 200, 200
+    W, H = 400, 400
     screen = pygame.display.set_mode((W, H))
+    w = (255, 255, 255)
+    blk = (0, 0, 0)
+    pygame.display.set_caption('Window')
+    font = pygame.font.SysFont('timesnewroman', 14)
+    
+    # rpyt states
+    text = font.render('self.screen_text', True, w, blk)
+    text_rect0 = text.get_rect()
+    text_rect0 = (200, 200)
+
+    # rpyt values
+    text_rect1 = text.get_rect()
+    text_rect0 = (200, 250)
 
     app = anafi()
 
     while not rospy.is_shutdown():
         try:
             pygame.display.flip()
+            screen.fill(blk)
+            text_0 = font.render(app.screen_text0, True, w, blk)
+            text_1 = font.render(app.screen_text1, True, w, blk)
+            screen.blit(text_0, text_rect0)
+            screen.blit(text_1, text_rect1)
             app.main()
             rate.sleep()
         except KeyboardInterrupt:
-            quit()
+            sys.exit()
