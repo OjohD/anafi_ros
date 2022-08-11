@@ -5,8 +5,11 @@ import time
 import sys
 
 import pygame
+from datetime import datetime
+import threading
 
-from std_msgs.msg import Int16
+
+from std_msgs.msg import Int16, Float32
 from anafi_tutorials.msg import piloting_CMD
 
 
@@ -18,22 +21,35 @@ class anafi():
         self.pub_land = rospy.Publisher("/anafi/land", Int16, queue_size=1)
         self.pub_control = rospy.Publisher(
             "/anafi/flight_control", piloting_CMD, queue_size=1)
+        self.pub_savedata = rospy.Publisher(
+            "/anafi/save_data", Int16, queue_size=1)
 
+        self.sub_droneSpeed = rospy.Subscriber(
+            "/anafi/horizontal_speed", Float32, self.get_droneSpeed)
+
+        self.stop_threat = False
         self.takeoff_land_msg = Int16()
         self.drone_msg = piloting_CMD()
+        self.save_msg = Int16()
+        self.previous_time = time.time()
         self.roll, self.pitch, self.yaw, self.thrust = 10, 10, 10, 10         # actual values
         # rpyt state select
         self.state_roll, self.state_pitch, self.state_yaw, self.state_thrust = 0, 0, 0, 0
-        self.screen_text0 = "Hello World"
-        self.screen_text1 = "Hello World"
-    def main(self):
 
-        self.screen_text0 = ("rpyt states: " + str(self.state_roll) + " " + str(
+        # Display data
+        self.screen_text_RPYT_States_Select = " "
+        self.screen_text_RPYT_Atual_Values = " "
+        self.screen_text_drone_speed = " "
+
+    def get_droneSpeed(self, msg):
+        self.screen_text_drone_speed = str("{:.3f}".format(msg.data)) + " m/s"
+
+    def main(self):
+        self.screen_text_RPYT_States_Select = ("rpyt states: " + str(self.state_roll) + " " + str(
             self.state_pitch) + " " + str(self.state_yaw) + " " + str(self.state_thrust))
 
-        self.screen_text1 = ("rpyt values: " + str(self.roll) + " " + str(
+        self.screen_text_RPYT_Atual_Values = ("rpyt values: " + str(self.roll) + " " + str(
             self.pitch) + " " + str(self.yaw) + " " + str(self.thrust))
-
 
         rospy.loginfo("states -- r: %s p: %s y: %s t: %s", str(self.state_roll), str(
             self.state_pitch), str(self.state_yaw), str(self.state_thrust))
@@ -42,20 +58,27 @@ class anafi():
 
             if event.type == pygame.QUIT:
                 # quit safely by landing drone
-                # self.drone.piloting_pcmd(0, 0, 0, 0, 0.0)
-                time.sleep(1)
-                self.takeoff_land_msg.data = 2
-                self.pub_land.publish(self.takeoff_land_msg)
-                rospy.loginfo('Land')
-                pygame.display.quit()
-                pygame.quit()
-                sys.exit()
 
-            elif event.type == pygame.KEYUP:
                 self.drone_msg.roll = 0
                 self.drone_msg.pitch = 0
                 self.drone_msg.yaw = 0
                 self.drone_msg.thrust = 0
+                self.pub_control.publish(self.drone_msg)
+                # time.sleep(1)
+                self.stop_threat = True
+                self.takeoff_land_msg.data = 2
+                self.pub_land.publish(self.takeoff_land_msg)
+                rospy.loginfo('Land')
+                # pygame.display.quit()
+                # pygame.quit()
+                # sys.exit()
+
+            elif event.type == pygame.KEYUP:
+                # self.drone_msg.roll = 0
+                # self.drone_msg.pitch = 0
+                self.drone_msg.yaw = 0
+                self.drone_msg.thrust = 0
+                pass
 
             elif event.type == pygame.KEYDOWN:
                 if self.state_roll:
@@ -105,7 +128,11 @@ class anafi():
                     self.status = True
 
                 if event.key == pygame.K_SPACE:
-
+                    self.drone_msg.roll = 0
+                    self.drone_msg.pitch = 0
+                    self.drone_msg.yaw = 0
+                    self.drone_msg.thrust = 0
+                    self.pub_control.publish(self.drone_msg)
                     self.takeoff_land_msg.data = 2
                     self.pub_land.publish(self.takeoff_land_msg)
                     rospy.loginfo('Land')
@@ -113,16 +140,20 @@ class anafi():
 
                 elif event.key == pygame.K_w:
                     self.drone_msg.pitch = self.pitch        # Forward
-
+                    self.save_msg.data = 1
+                    self.previous_time = time.time()
                 elif event.key == pygame.K_s:
                     self.drone_msg.pitch = -self.pitch        # Backward
-
+                    self.save_msg.data = 1
+                    self.previous_time = time.time()
                 elif event.key == pygame.K_a:
                     self.drone_msg.roll = -self.roll        # left
-
+                    self.save_msg.data = 1
+                    self.previous_time = time.time()
                 elif event.key == pygame.K_d:
                     self.drone_msg.roll = self.roll        # right
-
+                    self.save_msg.data = 1
+                    self.previous_time = time.time()
                 elif event.key == pygame.K_j:
                     self.drone_msg.yaw = -self.yaw  # turn left
 
@@ -158,7 +189,75 @@ class anafi():
             else:
                 continue
 
+        # automate control for some duration
+        if self.save_msg.data == 1:
+            rospy.loginfo("Start recording")
+
+            if time.time() - self.previous_time > 8:
+                self.save_msg.data = 0
+                self.previous_time = time.time()
+                self.drone_msg.roll = 0
+                self.drone_msg.pitch = 0
+                self.drone_msg.yaw = 0
+                self.drone_msg.thrust = 0
+                rospy.loginfo("Stop recording")
+        self.pub_savedata.publish(self.save_msg)
         self.pub_control.publish(self.drone_msg)
+
+
+telemetry = "Anafi flight data"
+stop_threat = False
+
+
+def display_text(text, pos):
+
+    # Flight data to display
+    global telemetry
+    global stop_threat
+
+    # display settings
+    pygame.init()
+    W, H = 500, 400
+    FPS = 60
+    screen = pygame.display.set_mode((W, H), pygame.RESIZABLE)
+    pygame.display.set_caption('Anafi Control Panel')
+    t_font = pygame.font.SysFont('timesnewroman', 18)
+    clock = pygame.time.Clock()
+    color = pygame.Color('white')
+
+    while not stop_threat:
+
+        # Updating flight data
+        text = telemetry
+        # dt = clock.tick(FPS) / 1000
+        # for event in pygame.event.get():
+        #     if event.type == pygame.QUIT:
+        #         quit()
+
+        screen.fill(pygame.Color('black'))
+        # 2D array where each row is a list of words.
+        words = [word.split(' ') for word in text.splitlines()]
+        # The width of a space.
+        space = t_font.size(' ')[0]
+        max_width, max_height = screen.get_size()
+        x, y = pos
+        for line in words:
+            for word in line:
+                word_surface = t_font.render(word, 0, color)
+                word_width, word_height = word_surface.get_size()
+                if x + word_width >= max_width:
+                    # Reset the x.
+                    x = pos[0]
+                    # Start on new row.
+                    y += word_height
+                screen.blit(word_surface, (x, y))
+                x += word_width + space
+            # Reset the x.
+            x = pos[0]
+            # Start on new row.
+            y += word_height
+
+        pygame.display.update()
 
 
 if __name__ == '__main__':
@@ -166,36 +265,43 @@ if __name__ == '__main__':
     rospy.init_node("publisher_node")
     rospy.loginfo('Publisher initialized')
     rate = rospy.Rate(100)
-
-    # display settings
-    pygame.init()
-    W, H = 400, 400
-    screen = pygame.display.set_mode((W, H))
-    w = (255, 255, 255)
-    blk = (0, 0, 0)
-    pygame.display.set_caption('Window')
-    font = pygame.font.SysFont('timesnewroman', 14)
-    
-    # rpyt states
-    text = font.render('self.screen_text', True, w, blk)
-    text_rect0 = text.get_rect()
-    text_rect0 = (200, 200)
-
-    # rpyt values
-    text_rect1 = text.get_rect()
-    text_rect0 = (200, 250)
-
     app = anafi()
+
+    # Flight data display thread
+    threading.Thread(target=display_text, args=(telemetry, (100, 100))).start()
 
     while not rospy.is_shutdown():
         try:
-            pygame.display.flip()
-            screen.fill(blk)
-            text_0 = font.render(app.screen_text0, True, w, blk)
-            text_1 = font.render(app.screen_text1, True, w, blk)
-            screen.blit(text_0, text_rect0)
-            screen.blit(text_1, text_rect1)
+
+            if stop_threat:
+                pygame.display.quit()
+                pygame.quit()
+                sys.exit()
+       
             app.main()
+            stop_threat = app.stop_threat
+
+            # Updating the display
+            now = datetime.now()
+            dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+            telemetry = "ANAFI FLIGHT CONTROL PANEL" + "\n" + "        " + dt_string + "\n" + "  " + "\n" \
+                + "RPYT States:        " + app.screen_text_RPYT_States_Select + "\n" \
+                + "RPYT Values:      " + app.screen_text_RPYT_Atual_Values + "\n" \
+                        + "HS:                 " + app.screen_text_drone_speed + " m/s" \
+                            + "\n" \
+                                + "\n" \
+                                    + " Flight Controls Keys" +"\n" \
+                                        + " Roll     ______________ A / D" + "\n" \
+                                            + " Pitch    ______________ W / S" + "\n" \
+                                                + " Yaw      ______________ J / L" + "\n" \
+                                                    + " Thrust   ______________ E / C" + "\n" \
+                                                        + " Take Off ______________ T" + "\n" \
+                                                            + " Land     ______________ SPACE" + "\n" \
+
+
             rate.sleep()
+
         except KeyboardInterrupt:
+            pygame.display.quit()
+            pygame.quit()
             sys.exit()

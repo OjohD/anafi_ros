@@ -56,8 +56,8 @@ class Anafi:
         # rospy.Subscriber(
         #     "/anafi/speed", Vector3Stamped, self.compute_PID)
 
-        DRONE_IP = '10.202.0.1'  # SIM
-        # DRONE_IP = "192.168.42.1"  # REAL
+        # DRONE_IP = '10.202.0.1'  # SIM
+        DRONE_IP = "192.168.42.1"  # REAL
         self.drone = olympe.Drone(
             DRONE_IP, drone_type=od.ARSDK_DEVICE_TYPE_ANAFI4K)
 
@@ -96,13 +96,13 @@ class Anafi:
                         state="landing", _timeout=5)).wait()
 
                 elif event.key == pygame.K_w:
-                    self.vxx = 20
+                    self.vxx = 10
                 elif event.key == pygame.K_s:
-                    self.vxx = -20
+                    self.vxx = -10
                 elif event.key == pygame.K_a:
-                    self.vyy = -20
+                    self.vyy = -10
                 elif event.key == pygame.K_d:
-                    self.vyy = 20
+                    self.vyy = 10
 
         # non-blocking PCMD (roll, pitch, yaw, thrust, piloting_time)
         self.drone.piloting_pcmd(self.vyy, self.vxx, 0, 0, 0.2)
