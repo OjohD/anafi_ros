@@ -25,8 +25,8 @@ def read_data(msg):
     # orientation of the AR tag
     roll, pitch, yaw = transformations.euler_from_quaternion(
         [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
-    # print("[ROS INFO] roll:{:.3f}, pitch:{:.3f}, yaw:{:.3f}".format(
-    #     roll, pitch, yaw))
+    print("[ROS INFO] roll:{:.3f}, pitch:{:.3f}, yaw:{:.3f}".format(
+        roll, pitch, yaw))
 
     roll_deg = roll * 180/math.pi
     pitch_deg = pitch * 180/math.pi
@@ -43,8 +43,8 @@ def read_data(msg):
 
     a = np.asarray([r_list, p_list, y_list])
 
-    print("[ROS INFO] roll:{:.3f}, pitch:{:.3f}, yaw:{:.3f}".format(
-        roll_deg, pitch_deg, yaw_deg))
+    # print("[ROS INFO] roll:{:.3f}, pitch:{:.3f}, yaw:{:.3f}".format(
+    #     roll_deg, pitch_deg, yaw_deg))
 
 
 def save_bool(msg):
