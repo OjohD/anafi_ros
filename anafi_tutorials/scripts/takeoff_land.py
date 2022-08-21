@@ -11,6 +11,8 @@ import queue
 import threading
 from cv_bridge import CvBridge
 
+from olympe.messages.ardrone3.PilotingSettings import MaxTilt
+from olympe.messages.ardrone3.PilotingSettingsState import MaxTiltChanged
 from olympe.messages.ardrone3.Piloting import TakeOff, Landing, PCMD
 from olympe.messages.ardrone3.PilotingState import FlyingStateChanged, AttitudeChanged, SpeedChanged, AltitudeChanged, ReturnHomeBatteryCapacity
 from olympe.messages.battery import voltage
@@ -54,8 +56,8 @@ class anafi():
         self.status = False
         self.connected = False
 
-        # DRONE_IP = '10.202.0.1'  # SIM
-        DRONE_IP = "192.168.42.1"  # REAL
+        DRONE_IP = '10.202.0.1'  # SIM
+        # DRONE_IP = "192.168.42.1"  # REAL
         self.drone = olympe.Drone(DRONE_IP)
         self.connection = self.drone.connect()
         if getattr(self.connection, 'OK') == True:
@@ -68,6 +70,9 @@ class anafi():
                 raw_cb=self.yuv_frame_cb)
             # flush_raw_cb=self.flush_cb)
             self.drone.start_video_streaming()
+
+            # set max tilt
+            self.drone(MaxTilt(10)).wait().success()
         else:
             print('No connection')
 
@@ -274,14 +279,13 @@ class anafi():
 
     def log_changes(self):
 
-         # battery status
+        # battery status
         # drone_battery = self.drone.get_state(ReturnHomeBatteryCapacity)
         # self.pub_height.publish(drone_height['altitude'])
-        
+
         # drone height
         drone_height = self.drone.get_state(AltitudeChanged)
         self.pub_height.publish(drone_height['altitude'])
-
 
         drone_rpy = self.drone.get_state(AttitudeChanged)
         speed_dict = self.drone.get_state(SpeedChanged)
@@ -292,12 +296,20 @@ class anafi():
             (speed_dict['speedX'])**2 + (speed_dict['speedY'])**2)
         self.pub_horizontalspeed.publish(drone_speed)
 
+        # drone max tilt
+        # self.drone(MaxTilt(10)).wait().success()
+        current_max_tilt = self.drone.get_state(MaxTiltChanged)["current"]
 
-        # r = drone_rpy['roll']
-        # p = drone_rpy['pitch']
-        # y = drone_rpy['yaw']
+        # do not want to flood terminal
+        if time.time()-self.previousTime < 10:
+            rospy.loginfo("current max_tilt--------:"+str(current_max_tilt))
 
-        # rospy.loginfo(drone_battery)
+        r = drone_rpy['roll']
+        p = drone_rpy['pitch']
+        y = drone_rpy['yaw']
+
+        rospy.loginfo("-----------RPY-----------")
+        rospy.loginfo("r=%.2f, p=%.2f, y=%.2f", r, p, y)
 
     # def yuv_main(self):
     #     with self.flush_queue_lock:
