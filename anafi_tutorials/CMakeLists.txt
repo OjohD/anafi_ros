@@ -49,7 +49,7 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   FILES
   piloting_CMD.msg
-  # Message2.msg
+  drone_rpy.msg
 )
 
 ## Generate services in the 'srv' folder

@@ -20,7 +20,7 @@ from std_msgs.msg import Int16, Time, Header, Float32, UInt8
 from geometry_msgs.msg import Twist, PointStamped, Vector3Stamped, QuaternionStamped, PoseStamped, Quaternion
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image
-from anafi_tutorials.msg import piloting_CMD
+from anafi_tutorials.msg import piloting_CMD, drone_rpy
 
 from scipy.spatial.transform import Rotation as R
 
@@ -48,16 +48,19 @@ class anafi():
             "/anafi/image", Image, queue_size=1)
         self.pub_horizontalspeed = rospy.Publisher(
             "/anafi/horizontal_speed", Float32, queue_size=1)
+        self.pub_rpy = rospy.Publisher(
+            "/anafi/rpy", drone_rpy, queue_size=1)
         # self.pub_odometry = rospy.Publisher(         pass
         self.bridge = CvBridge()
+        self.rpy_msg = drone_rpy()
         self.frame_queue = queue.Queue()
         self.flush_queue_lock = threading.Lock()
 
         self.status = False
         self.connected = False
 
-        DRONE_IP = '10.202.0.1'  # SIM
-        # DRONE_IP = "192.168.42.1"  # REAL
+        # DRONE_IP = '10.202.0.1'  # SIM
+        DRONE_IP = "192.168.42.1"  # REAL
         self.drone = olympe.Drone(DRONE_IP)
         self.connection = self.drone.connect()
         if getattr(self.connection, 'OK') == True:
@@ -72,7 +75,7 @@ class anafi():
             self.drone.start_video_streaming()
 
             # set max tilt
-            self.drone(MaxTilt(10)).wait().success()
+            self.drone(MaxTilt(5)).wait().success()
         else:
             print('No connection')
 
@@ -304,12 +307,15 @@ class anafi():
         if time.time()-self.previousTime < 10:
             rospy.loginfo("current max_tilt--------:"+str(current_max_tilt))
 
-        r = drone_rpy['roll']
-        p = drone_rpy['pitch']
-        y = drone_rpy['yaw']
+        self.rpy_msg.roll  = drone_rpy['roll'] * 180/math.pi
+        self.rpy_msg.pitch = drone_rpy['pitch'] * 180/math.pi
+        self.rpy_msg.yaw = drone_rpy['yaw'] * 180/math.pi
+
+
+        self.pub_rpy.publish(self.rpy_msg)
 
         rospy.loginfo("-----------RPY-----------")
-        rospy.loginfo("r=%.2f, p=%.2f, y=%.2f", r, p, y)
+        rospy.loginfo("r=%.2f, p=%.2f, y=%.2f", self.rpy_msg.roll, self.rpy_msg.pitch, self.rpy_msg.yaw)
 
     # def yuv_main(self):
     #     with self.flush_queue_lock:

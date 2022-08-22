@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
-from distutils.command.install_egg_info import safe_version
+
 import rospy
 import matplotlib.pyplot as plt
 import numpy as np
 import math
 from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Int16
+from anafi_tutorials.msg import drone_rpy
 from tf import transformations
 import csv
 import time
@@ -20,7 +21,7 @@ def read_data(msg):
     x = msg.pose.position.x
     y = msg.pose.position.y
     z = msg.pose.position.z
-    print("[ROS INFO] x:{:.2f}, y:{:.2f}, z:{:.2f}".format(x, y, z))
+    # print("[ROS INFO] x:{:.2f}, y:{:.2f}, z:{:.2f}".format(x, y, z))
 
     # orientation of the AR tag
     roll, pitch, yaw = transformations.euler_from_quaternion(
@@ -43,8 +44,31 @@ def read_data(msg):
 
     a = np.asarray([r_list, p_list, y_list])
 
-    print("[ROS INFO] roll:{:.3f}, pitch:{:.3f}, yaw:{:.3f}".format(
-        roll_deg, pitch_deg, yaw_deg))
+    print("[MOTION] roll:{:.3f}, pitch:{:.3f}, yaw:{:.3f}".format(
+         roll_deg, pitch_deg,yaw_deg))
+
+
+def read_rpy(msg):
+    global b
+    global saver
+    global drone_r_list, drone_p_list, drone_y_list
+    r = msg.roll
+    p = msg.pitch
+    y = msg.yaw
+
+    if saver:
+        drone_r_list.append(r)
+        drone_p_list.append(p)
+        drone_y_list.append(y)
+    else:
+        drone_r_list = []
+        drone_p_list = []
+        drone_y_list = []
+
+    b = np.asarray([drone_r_list, drone_p_list, drone_y_list])
+
+    # print("[DRONE] roll:{:.3f}, pitch:{:.3f}, yaw:{:.3f}".format(
+    #     r, p, y))
 
 
 def save_bool(msg):
@@ -63,9 +87,11 @@ def save_bool(msg):
         f_name = _dir + "test_" + str(c) + ".csv"
         with open(f_name, 'w') as f:
             writer = csv.writer(f)
-            writer.writerow(['roll', 'pitch', 'yaw'])
+            writer.writerow(
+                ['roll', 'pitch', 'yaw', 'drone_roll', 'drone_pitch', 'drone_yaw'])
             for i in range(len(r_list)):
-                writer.writerow([r_list[i], p_list[i], y_list[i]])
+                writer.writerow([r_list[i], p_list[i], y_list[i],
+                                drone_r_list[i], drone_p_list[i], drone_y_list[i]])
         f.close()
 
         timer_bool_act = False
@@ -77,15 +103,22 @@ rospy.init_node("get_data_node")
 rospy.loginfo('Getting Anafi Pose')
 rospy.Subscriber("/vrpn_client_node/Anafi/pose", PoseStamped, read_data)
 rospy.Subscriber("/anafi/save_data", Int16, save_bool)
+rospy.Subscriber("/anafi/rpy", drone_rpy, read_rpy)
 r_list = []
 p_list = []
 y_list = []
+
+drone_r_list = []
+drone_p_list = []
+drone_y_list = []
+
 saver = 0
 c = 0
 timer_bool_act = False
-
+loop_rate = rospy.Rate(10)
 if __name__ == '__main__':
     try:
         rospy.spin()
+        loop_rate.sleep()
     except KeyboardInterrupt:
         rospy.loginfo('...exiting due to keyboard interrupt')

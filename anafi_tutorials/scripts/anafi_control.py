@@ -32,7 +32,8 @@ class anafi():
         self.drone_msg = piloting_CMD()
         self.save_msg = Int16()
         self.previous_time = time.time()
-        self.roll, self.pitch, self.yaw, self.thrust = 10, 10, 10, 10         # actual values
+        self.elapsed = 0
+        self.roll, self.pitch, self.yaw, self.thrust = 10, 100, 50, 100         # actual values
         # rpyt state select
         self.state_roll, self.state_pitch, self.state_yaw, self.state_thrust = 0, 0, 0, 0
 
@@ -192,8 +193,8 @@ class anafi():
         # automate control for some duration
         if self.save_msg.data == 1:
             rospy.loginfo("Start recording")
-
-            if time.time() - self.previous_time > 8:
+            self.elapsed = time.time() - self.previous_time
+            if self.elapsed > 8:
                 self.save_msg.data = 0
                 self.previous_time = time.time()
                 self.drone_msg.roll = 0
@@ -277,7 +278,7 @@ if __name__ == '__main__':
                 pygame.display.quit()
                 pygame.quit()
                 sys.exit()
-       
+
             app.main()
             stop_threat = app.stop_threat
 
@@ -287,16 +288,17 @@ if __name__ == '__main__':
             telemetry = "ANAFI FLIGHT CONTROL PANEL" + "\n" + "        " + dt_string + "\n" + "  " + "\n" \
                 + "RPYT States:        " + app.screen_text_RPYT_States_Select + "\n" \
                 + "RPYT Values:      " + app.screen_text_RPYT_Atual_Values + "\n" \
-                        + "HS:                 " + app.screen_text_drone_speed + " m/s" \
-                            + "\n" \
-                                + "\n" \
-                                    + " Flight Controls Keys" +"\n" \
-                                        + " Roll     ______________ A / D" + "\n" \
-                                            + " Pitch    ______________ W / S" + "\n" \
-                                                + " Yaw      ______________ J / L" + "\n" \
-                                                    + " Thrust   ______________ E / C" + "\n" \
-                                                        + " Take Off ______________ T" + "\n" \
+                        + "HS:                 " + app.screen_text_drone_speed  \
+                + "\n" \
+                + "\n" \
+                + " Flight Controls Keys" + "\n" \
+                + " Roll     ______________ A / D" + "\n" \
+                + " Pitch    ______________ W / S" + "\n" \
+                + " Yaw      ______________ J / L" + "\n" \
+                + " Thrust   ______________ E / C" + "\n" \
+                + " Take Off ______________ T" + "\n" \
                                                             + " Land     ______________ SPACE" + "\n" \
+                + " Time    :===:  " + str(app.elapsed) + "\n" \
 
 
             rate.sleep()
