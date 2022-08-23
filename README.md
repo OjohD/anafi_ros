@@ -92,10 +92,11 @@ To check if the service started:
 You should get a respond with "PONG"
 
 
-Start the simulator 
+Start the simulator
 
     sphinx "/opt/parrot-sphinx/usr/share/sphinx/drones/anafi4k.drone"::firmware="ftp://<user>:<password>@ftp2.parrot.biz/versions/anafi/pc/%23latest/images/anafi-pc.ext2.zip
 
+**NB.** You can also replace the firmware server string with the image file path in your local computer.
 In a new terminal, launch your UE4 application.
 
     parrot-ue4-empty
