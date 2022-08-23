@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from pickletools import uint8
 from tkinter import font
 import rospy
 import time
@@ -9,7 +10,7 @@ from datetime import datetime
 import threading
 
 
-from std_msgs.msg import Int16, Float32
+from std_msgs.msg import Int16, Float32, UInt8
 from anafi_tutorials.msg import piloting_CMD
 
 
@@ -27,10 +28,13 @@ class anafi():
         self.sub_droneSpeed = rospy.Subscriber(
             "/anafi/horizontal_speed", Float32, self.get_droneSpeed)
 
+        self.sub_battery = rospy.Subscriber(
+            "/anafi/battery", UInt8, self.get_battery_percentage)
+
         self.stop_threat = False
         self.takeoff_land_msg = Int16()
         self.drone_msg = piloting_CMD()
-        self.save_msg = Int16()
+        self.save_msg = Int16()        
         self.previous_time = time.time()
         self.elapsed = 0
         self.roll, self.pitch, self.yaw, self.thrust = 10, 100, 50, 100         # actual values
@@ -41,9 +45,13 @@ class anafi():
         self.screen_text_RPYT_States_Select = " "
         self.screen_text_RPYT_Atual_Values = " "
         self.screen_text_drone_speed = " "
+        self.battery_percenatge = " "
 
     def get_droneSpeed(self, msg):
         self.screen_text_drone_speed = str("{:.3f}".format(msg.data)) + " m/s"
+
+    def get_battery_percentage(self, msg):
+        self.battery_percenatge = str(msg.data) + " %"
 
     def main(self):
         self.screen_text_RPYT_States_Select = ("rpyt states: " + str(self.state_roll) + " " + str(
@@ -194,7 +202,8 @@ class anafi():
         if self.save_msg.data == 1:
             rospy.loginfo("Start recording")
             self.elapsed = time.time() - self.previous_time
-            if self.elapsed > 8:
+            #########################################################################################
+            if self.elapsed > 30:
                 self.save_msg.data = 0
                 self.previous_time = time.time()
                 self.drone_msg.roll = 0
@@ -220,7 +229,7 @@ def display_text(text, pos):
     pygame.init()
     W, H = 500, 400
     FPS = 60
-    screen = pygame.display.set_mode((W, H), pygame.RESIZABLE)
+    screen = pygame.display.set_mode((W, H))
     pygame.display.set_caption('Anafi Control Panel')
     t_font = pygame.font.SysFont('timesnewroman', 18)
     clock = pygame.time.Clock()
@@ -292,8 +301,8 @@ if __name__ == '__main__':
                 + "\n" \
                 + "\n" \
                 + " Flight Controls Keys" + "\n" \
-                + " Roll     ______________ A / D" + "\n" \
-                + " Pitch    ______________ W / S" + "\n" \
+                + " Roll     ______________ A / D" + "            Battery" + "\n" \
+                + " Pitch    ______________ W / S" + "              " + app.battery_percenatge + "\n" \
                 + " Yaw      ______________ J / L" + "\n" \
                 + " Thrust   ______________ E / C" + "\n" \
                 + " Take Off ______________ T" + "\n" \
