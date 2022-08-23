@@ -142,6 +142,14 @@ class anafi():
         info = yuv_frame.info()
         height, width = info["yuv"]["height"], info["yuv"]["width"]
 
+        # Battery percentage
+        meta_data = yuv_frame.vmeta()
+        battery = UInt8()
+        battery.data = meta_data[1]['battery_percentage']
+        self.pub_battery.publish(battery)
+        
+
+
         # convert pdraw YUV flag to OpenCV YUV flag
         cv2_cvt_color_flag = {
             olympe.PDRAW_YUV_FORMAT_I420: cv2.COLOR_YUV2BGR_I420,
